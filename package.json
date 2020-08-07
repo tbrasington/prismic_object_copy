@@ -1,0 +1,8 @@
+{
+  "name": "prismic_object_copy",
+  "version": "1.0.0",
+  "description": "Copies slices from locale to locale",
+  "main": "index.js",
+  "author": "Thomas Brasington",
+  "license": "MIT"
+}
