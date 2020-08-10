@@ -29,12 +29,13 @@ const readFiles = (dirname) => {
 const findOtherLocales = (grouplang, files, locale) => {
 	let matchingFiles = [];
 
-	files.forEach((item) => {
-
-		const parsedContent = JSON.parse(item.content);
-		const body = parsedContent.body || null;
-		if (body && parsedContent.grouplang == grouplang && parsedContent.lang === locale) {
-			matchingFiles.push(item.content);
+	 files.forEach((item) => {
+		if (item && item.content) {
+			const parsedContent = JSON.parse(item.content);
+			const body = parsedContent.body || null;
+			if (body && parsedContent.grouplang == grouplang && parsedContent.lang === locale) {
+				matchingFiles.push({content : item.content, filename: item.filename});
+			}
 		}
 	});
 
@@ -44,31 +45,56 @@ const findOtherLocales = (grouplang, files, locale) => {
 readFiles(directory)
 	.then((contents) => {
 		// optional:
+
+		const jsonFiles = contents.filter( item => item.filename.includes(".json"))
+
 		const articlesWithRecommendations = [];
-		contents.forEach((item, i) => {
-			const parsedContent = JSON.parse(item.content);
-			const body = parsedContent.body || null;
+		jsonFiles.forEach((item, i) => {
+			if (item && item.content) {
+				const parsedContent = JSON.parse(item.content);
+				const body = parsedContent.body || null;
 
-			if (body && parsedContent.lang === 'en-gb') {
-				const productRecomendations = body.findIndex((element) => element.key.includes('product_'));
+				if (body && parsedContent.lang === 'en-gb') {
+					const productRecomendations = body.findIndex((element) => element.key.includes('product_'));
 
-				if (productRecomendations > 0) {
-					const otherFiles = findOtherLocales(parsedContent.grouplang, contents, 'is');
-				
-					if (otherFiles.length > 0) {
-						articlesWithRecommendations.push({
-							grouplang: parsedContent.grouplang,
-							data: parsedContent,
-							locales: otherFiles
-						});
+					if (productRecomendations > 0) {
+						const otherFiles = findOtherLocales(parsedContent.grouplang, jsonFiles, 'is');
+
+						if (otherFiles.length > 0) {
+							articlesWithRecommendations.push({
+								grouplang: parsedContent.grouplang,
+								data: parsedContent,
+								locales: otherFiles
+							});
+						}
 					}
 				}
 			}
 		});
 
-		console.log(articlesWithRecommendations[0]);
-
 		// send data here
+		const fileToMerge = articlesWithRecommendations[0];
+		const fileContent = fileToMerge.data.body;
+		const targetFileContent = fileToMerge.locales[0];
+		let previousElement = null;
+		let productRecommendationData = []
+		
+		// get the json data and what the previous sibling element is
+		fileContent.forEach((item, index) => {
+			if (item.key.includes('product_rec')) {
+				productRecommendationData.push({
+					item,
+					previous: previousElement
+				});
+			}
+			previousElement = item;
+		});
+
+		// now lets open up the icelandic file
+		let LocaleBody = JSON.parse(targetFileContent.content)
+		// remove any existing product recommendations
+		let LocaleBodyWithNoProducts = LocaleBody.body.filter(item => !item.key.includes("product_rec"))
+		console.log(LocaleBodyWithNoProducts)
 	})
 	.catch((err) => {
 		console.error(err);
