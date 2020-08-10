@@ -29,12 +29,12 @@ const readFiles = (dirname) => {
 const findOtherLocales = (grouplang, files, locale) => {
 	let matchingFiles = [];
 
-	 files.forEach((item) => {
+	files.forEach((item) => {
 		if (item && item.content) {
 			const parsedContent = JSON.parse(item.content);
 			const body = parsedContent.body || null;
 			if (body && parsedContent.grouplang == grouplang && parsedContent.lang === locale) {
-				matchingFiles.push({content : item.content, filename: item.filename});
+				matchingFiles.push({ content: item.content, filename: item.filename });
 			}
 		}
 	});
@@ -42,11 +42,20 @@ const findOtherLocales = (grouplang, files, locale) => {
 	return matchingFiles;
 };
 
+const insert = (arr, index, newItem) => [
+	// part of the array before the specified index
+	...arr.slice(0, index),
+	// inserted item
+	newItem,
+	// part of the array after the specified index
+	...arr.slice(index)
+];
+
 readFiles(directory)
 	.then((contents) => {
 		// optional:
 
-		const jsonFiles = contents.filter( item => item.filename.includes(".json"))
+		const jsonFiles = contents.filter((item) => item.filename.includes('.json'));
 
 		const articlesWithRecommendations = [];
 		jsonFiles.forEach((item, i) => {
@@ -77,13 +86,13 @@ readFiles(directory)
 		const fileContent = fileToMerge.data.body;
 		const targetFileContent = fileToMerge.locales[0];
 		let previousElement = null;
-		let productRecommendationData = []
-		
+		let productRecommendationData = [];
+
 		// get the json data and what the previous sibling element is
-		fileContent.forEach((item, index) => {
+		fileContent.map((item, index) => {
 			if (item.key.includes('product_rec')) {
 				productRecommendationData.push({
-					item,
+					inject: item,
 					previous: previousElement
 				});
 			}
@@ -91,10 +100,46 @@ readFiles(directory)
 		});
 
 		// now lets open up the icelandic file
-		let LocaleBody = JSON.parse(targetFileContent.content)
+		let LocaleBody = JSON.parse(targetFileContent.content);
 		// remove any existing product recommendations
-		let LocaleBodyWithNoProducts = LocaleBody.body.filter(item => !item.key.includes("product_rec"))
-		console.log(LocaleBodyWithNoProducts)
+		let LocaleBodyWithNoProducts = LocaleBody.body.filter((item) => !item.key.includes('product_rec'));
+
+		//lets loops over what products want to inject
+	
+		// loop over the LocaleBodyWithNoProducts
+		// if one of its key's matches, clone the array and inject the product rec,
+		// pass that array back to the loop, and go over the next one
+		let rebuiltBody = [];
+		let noMatch = []
+		LocaleBodyWithNoProducts.forEach((originalItem) => {
+			rebuiltBody.push(originalItem);
+			productRecommendationData.forEach((productRec) => {
+				if (productRec.previous.key === originalItem.key) {
+					rebuiltBody.push(productRec.inject);
+				} 
+			});
+		});
+
+		// we do a second pass to then add in the products by id under the section id
+		let rebuiltBody2 = [];
+		const f = productRecommendationData.filter(
+			(p) => !p.inject.key.includes('product_recommendation_section_by_ids')
+		);
+		rebuiltBody.forEach((originalItem) => {
+			rebuiltBody2.push(originalItem);
+			f.forEach((productRec) => {
+				if (productRec.previous.key === originalItem.key) {
+					rebuiltBody2.push(productRec.inject);
+				}
+			});
+		});
+
+		// our rebuilt body
+		LocaleBody.body = rebuiltBody2;
+		console.log(targetFileContent.filename)
+
+		fs.writeFileSync('processed/' + targetFileContent.filename, JSON.stringify(LocaleBody));
+
 	})
 	.catch((err) => {
 		console.error(err);
