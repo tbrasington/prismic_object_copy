@@ -1,41 +1,78 @@
 var fs = require('fs');
+const { promisify } = require('util');
+const { match } = require('assert');
 
-function readFiles(dirname, onFileContent, onError) {
-	fs.readdir(dirname, function(err, filenames) {
-		if (err) {
-			onError(err);
-			return;
-		}
-		filenames.forEach(function(filename) {
-			fs.readFile(dirname + filename, 'utf-8', function(err, content) {
-				if (err) {
-					onError(err);
-					return;
-				}
-				onFileContent(filename, content);
-			});
-		});
+const directory = './documents/';
+
+let file;
+
+const readFiles = (dirname) => {
+	const readDirPr = new Promise((resolve, reject) => {
+		fs.readdir(dirname, (err, filenames) => (err ? reject(err) : resolve(filenames)));
 	});
-}
 
-let index = 0;
-readFiles(
-	'./documents/',
-	function(file, content) {
-		const parsedContent = JSON.parse(content);
+	return readDirPr.then((filenames) =>
+		Promise.all(
+			filenames.map((filename) => {
+				return new Promise((resolve, reject) => {
+					fs.readFile(
+						dirname + filename,
+						'utf-8',
+						(err, content) => (err ? reject(err) : resolve({ content: content, filename: filename }))
+					);
+				});
+			})
+		).catch((error) => Promise.reject(error))
+	);
+};
+
+const findOtherLocales = (grouplang, files, locale) => {
+	let matchingFiles = [];
+
+	files.forEach((item) => {
+
+		const parsedContent = JSON.parse(item.content);
 		const body = parsedContent.body || null;
-
-		if (body && parsedContent.lang==="en-gb") {
-			const productRecomendations = body.findIndex((element) => element.key.includes('product_'));
-			console.log(parsedContent.lang, productRecomendations);
+		if (body && parsedContent.grouplang == grouplang && parsedContent.lang === locale) {
+			matchingFiles.push(item.content);
 		}
+	});
 
-		index++;
-	},
-	function(error) {
-		console.log(error);
-	}
-);
+	return matchingFiles;
+};
+
+readFiles(directory)
+	.then((contents) => {
+		// optional:
+		const articlesWithRecommendations = [];
+		contents.forEach((item, i) => {
+			const parsedContent = JSON.parse(item.content);
+			const body = parsedContent.body || null;
+
+			if (body && parsedContent.lang === 'en-gb') {
+				const productRecomendations = body.findIndex((element) => element.key.includes('product_'));
+
+				if (productRecomendations > 0) {
+					const otherFiles = findOtherLocales(parsedContent.grouplang, contents, 'is');
+				
+					if (otherFiles.length > 0) {
+						articlesWithRecommendations.push({
+							grouplang: parsedContent.grouplang,
+							data: parsedContent,
+							locales: otherFiles
+						});
+					}
+				}
+			}
+		});
+
+		console.log(articlesWithRecommendations[0]);
+
+		// send data here
+	})
+	.catch((err) => {
+		console.error(err);
+	});
 
 /*
 
@@ -53,5 +90,6 @@ readFiles(
   - Filter out just to icelandic
   - Filter out if it has product recomendations already ? {this could also delete exising product recomendations}
   - Is there a group lang
-
+  
+https://stackoverflow.com/questions/10049557/reading-all-files-in-a-directory-store-them-in-objects-and-send-the-object
 */
